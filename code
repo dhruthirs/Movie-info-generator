@@ -1,0 +1,154 @@
+import requests
+import json
+import random
+import os
+
+API_KEY = "cbc1b92a"  # Replace with your OMDb API key
+HISTORY_FILE = "movie_history.json"
+
+def get_movie_info(title):
+    url = f"http://www.omdbapi.com/?apikey={API_KEY}&t={title}"
+    try:
+        response = requests.get(url)
+        info = response.json()
+        if info.get("Response") == "True":
+            return info
+        else:
+            print("❌ Error:", info.get("Error", "Unknown error."))
+    except Exception as e:
+        print("⚠️ API request failed:", e)
+    return None
+
+def load_saved_movies():
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE, "r") as file:
+            try:
+                return json.load(file)
+            except:
+                return []
+    return []
+
+def add_to_history(movie):
+    history = load_saved_movies()
+    if not any(m['Title'].lower() == movie['Title'].lower() for m in history):
+        history.append(movie)
+        with open(HISTORY_FILE, "w") as file:
+            json.dump(history, file, indent=2)
+        print(f"💾 '{movie['Title']}' saved to history.")
+    else:
+        print(f"ℹ️ '{movie['Title']}' is already in your history.")
+
+def print_movie(movie):
+    print(f"\n{movie['Title']} ({movie['Year']})")
+    print(f"IMDb Rating: {movie.get('imdbRating', 'N/A')}")
+    print(f"Genre: {movie.get('Genre', 'N/A')}")
+    print(f"Director: {movie.get('Director', 'N/A')}")
+    print(f"Plot: {movie.get('Plot', 'N/A')}\n")
+
+#  Fixed filtering by year and rating
+def filter_movies():
+    year = input("Enter year to filter by (or leave blank): ").strip()
+    rating = input("Minimum IMDb rating? (or leave blank): ").strip()
+
+    try:
+        rating = float(rating) if rating else None
+    except ValueError:
+        print("⚠️ Invalid rating. Please enter a number like 7.5.")
+        return
+
+    history = load_saved_movies()
+    matches = []
+
+    for m in history:
+        raw_year = m.get("Year", "")
+        movie_year = raw_year.split("–")[0].split(" ")[0].strip()
+
+        try:
+            imdb_rating = float(m.get("imdbRating", 0))
+        except:
+            imdb_rating = 0.0
+
+        year_match = not year or year == movie_year
+        rating_match = rating is None or imdb_rating >= rating
+
+        if year_match and rating_match:
+            matches.append(m)
+
+    if matches:
+        print(f"\n✅ Found {len(matches)} matching movies:")
+        for m in matches:
+            print_movie(m)
+    else:
+        print("❌ No matches found.")
+
+#  Fixed genre recommendation with partial match support
+def suggest_by_genre():
+    genre_input = input("Enter genre (e.g. Action, Comedy): ").strip().lower()
+    if not genre_input:
+        print("⚠️ Genre cannot be empty.")
+        return
+
+    history = load_saved_movies()
+    matching = []
+
+    for m in history:
+        genre_string = m.get("Genre", "")
+        genres = [g.strip().lower() for g in genre_string.split(",")]
+        if any(genre_input in g for g in genres):
+            matching.append(m)
+
+    if matching:
+        pick = random.choice(matching)
+        print("🎲 Here's a random movie in that genre:")
+        print_movie(pick)
+    else:
+        print(f"❌ No movies found matching genre '{genre_input}'.")
+
+def run_movie_app():
+    # Optionally seed the history for first-time users
+    if not load_saved_movies():
+        starter = get_movie_info("The Matrix")
+        if starter:
+            add_to_history(starter)
+
+    while True:
+        print("\n Movie Explorer")
+        print("1. Look up a movie")
+        print("2. Filter saved movies by year/rating")
+        print("3. Get random movie by genre")
+        print("4. Show your saved history")
+        print("5. Exit app")
+
+        choice = input("What would you like to do? (1-5): ").strip()
+
+        if choice == "1":
+            title = input("Movie title: ").strip()
+            movie = get_movie_info(title)
+            if movie:
+                print_movie(movie)
+                add_to_history(movie)
+
+        elif choice == "2":
+            filter_movies()
+
+        elif choice == "3":
+            suggest_by_genre()
+
+        elif choice == "4":
+            history = load_saved_movies()
+            if history:
+                print(f"\n You've searched {len(history)} movies:")
+                for m in history:
+                    print(f"- {m['Title']} ({m['Year']})")
+            else:
+                print("You haven’t saved anything yet.")
+
+        elif choice == "5":
+            print(" All done! See you next time.")
+            break
+
+        else:
+            print("⚠️ Invalid choice. Try a number between 1 and 5.")
+
+if __name__ == "__main__":
+    run_movie_app()
